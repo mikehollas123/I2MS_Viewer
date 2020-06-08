@@ -64,9 +64,10 @@ def CreateMZML(data,file):
         with writer.run(id=1, instrument_configuration='IC1'):
             with writer.spectrum_list(count=1):
                 writer.write_spectrum(
-                    np.array(X), np.array(Y), id=str(1), centroided=False,
+                    np.array(X), np.array(Y), id=str(1), centroided=True,
                     scan_start_time=1, scan_window_list=[(0, 500000.0)],
                     params=[{"ms levels": 1}, {"total ion current": sum(Y)}])
+    writer.close()
 
 if __name__ == '__main__':
     """

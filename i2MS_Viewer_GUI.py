@@ -90,7 +90,7 @@ def file_press(menu):
     if menu == "Add from Clipboard":
         app.showSubWindow("clipadd")
     elif menu == "Open":
-        filetoopen = app.openBox("openfile",fileTypes=[("compatible files",("*.I2MS","*.txt")),("i2ms files","*.I2MS"),("mzML","*.mzML"),("txt","*.txt"),("all file  types","*.*")])
+        filetoopen = app.openBox("openfile",fileTypes=[("compatible files",("*.I2MS","*.txt","*.csv")),("i2ms files","*.I2MS"),("mzML - not implemented yet","*.mzML"),("txt","*.txt"),("all file  types","*.*")])
 
         if  filetoopen.split(".")[-1].upper() == "I2MS" :
 
@@ -121,33 +121,37 @@ def file_press(menu):
 
         elif filetoopen.split(".")[-1].upper() == "MZML":
             "currently not supported"
+            app.errorBox("Open Error","Sorry mzML files are currently not supported for reading")
         elif filetoopen.split(".")[-1].upper() == "TXT" or filetoopen.split(".")[-1].upper() == "CSV":
 
             """
             load data from CSV file
             """
-            X, Y, ave_noise, Xscalar = opencsv(filetoopen)
+            try:
+                X, Y, ave_noise, Xscalar = opencsv(filetoopen)
 
 
-            X_mem = X
-            Y_mem = Y
-            ave_noise_mem = ave_noise
-            Xscalar_mem = Xscalar
+                X_mem = X
+                Y_mem = Y
+                ave_noise_mem = ave_noise
+                Xscalar_mem = Xscalar
 
-            # Update Status Bar
-            app.setStatusbar("Loaded file: {0}".format(filetoopen), 2)
-            app.setStatusbar("Mass Filter (Da): 1", 1)
-            app.setStatusbar("Intesity Filter: 1", 0)
-            app.setStatusbarWidth(len("Mass Filter (Da): 1"), field=1)
-            app.setStatusbarWidth(len("Intesity Filter: 1"), field=0)
-            app.setStatusbarWidth(len("Loaded file: {0}".format(filetoopen)), field=2)
+                # Update Status Bar
+                app.setStatusbar("Loaded file: {0}".format(filetoopen), 2)
+                app.setStatusbar("Mass Filter (Da): 1", 1)
+                app.setStatusbar("Intesity Filter: 1", 0)
+                app.setStatusbarWidth(len("Mass Filter (Da): 1"), field=1)
+                app.setStatusbarWidth(len("Intesity Filter: 1"), field=0)
+                app.setStatusbarWidth(len("Loaded file: {0}".format(filetoopen)), field=2)
 
-            openplot(X,Y,ave_noise,Xscalar,XFilter,YFilter)
+                openplot(X,Y,ave_noise,Xscalar,XFilter,YFilter)
+            except:
+                app.errorBox("Parsing Error","The csv file could no be parsed")
 
         elif filetoopen == "":
             return
         else:
-            app.warningBox("warn","Selected File is not compatable")
+            app.errorBox("Open Error","Selected File is not compatible")
 
     # Save currently loaded spectra
     elif menu == "Save as":
@@ -187,7 +191,7 @@ def update_filters(button):
 
 if __name__ == '__main__':
     #Create app - name and size
-    app = gui("I2MS Viewer 0.1", "800x600")
+    app = gui("I2MS Viewer 0.1", "800x600",showIcon=False)
 
     #build menus
     file_menus = ["Open","Save as","Add from Clipboard"]
