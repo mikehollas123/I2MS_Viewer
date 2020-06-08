@@ -6,6 +6,9 @@ X_mem = []
 Y_mem = []
 ave_noise_mem = 1
 Xscalar_mem = 1
+XFilter = (1,0)
+YFilter = 1
+
 
 """
 Button control for Add from Clipboard window
@@ -53,11 +56,23 @@ def opencsv(filetoopen):
 """
 open data and load it into plot window
 """
-def openplot(X,Y,ave_noise,Xscalar,XFilter=1,YFilter=0):
-    X = [X[i]*Xscalar for i in range(len(X)) if X[i] >= XFilter and Y[i] >= YFilter] # remove values that dont make it through the filter
-    Y = [Y[i] for i in range(len(X)) if X[i] >= XFilter and Y[i] >= YFilter]
+def openplot(X,Y,ave_noise,Xscalar,XFilter=(1,0),YFilter=1):
+
+    min_X_Filter = XFilter[0]
+    max_X_Filter = XFilter[1]
+
+    if max_X_Filter == 0:
+
+        X_filtered = [X[i] * Xscalar for i in range(len(X)) if
+             X[i]*Xscalar >= min_X_Filter and Y[i] >= YFilter]  # remove values that dont make it through the filter
+        Y_filtered = [Y[i] for i in range(len(Y)) if X[i]*Xscalar >= min_X_Filter and Y[i] >= YFilter]
+    else:
+
+        X_filtered = [X[i]*Xscalar for i in range(len(X)) if max_X_Filter >= X[i]*Xscalar >= min_X_Filter and Y[i] >= YFilter] # remove values that dont make it through the filter
+        Y_filtered = [Y[i] for i in range(len(Y)) if max_X_Filter >= X[i]*Xscalar >= min_X_Filter and Y[i] >= YFilter]
+    fig.clf()
     ax = fig.add_subplot()
-    ax.vlines(X, 0, Y)
+    ax.vlines(X_filtered, 0, Y_filtered)
     ax.axhline(ave_noise, 0, 1, color="r") # add 'baseline'
     ax.set_xlim(0.0)
     ax.set_ylim(0.0)
@@ -68,6 +83,10 @@ def openplot(X,Y,ave_noise,Xscalar,XFilter=1,YFilter=0):
 controls the file menu functions
 """
 def file_press(menu):
+
+    global XFilter
+    global YFilter
+
     if menu == "Add from Clipboard":
         app.showSubWindow("clipadd")
     elif menu == "Open":
@@ -98,7 +117,7 @@ def file_press(menu):
             app.setStatusbarWidth(len("Intesity Filter: 1"), field=0)
             app.setStatusbarWidth(len("Loaded file: {0}".format(filetoopen)), field=2)
 
-            openplot(X,Y,ave_noise,Xscalar)
+            openplot(X,Y,ave_noise,Xscalar,XFilter,YFilter)
 
         elif filetoopen.split(".")[-1].upper() == "MZML":
             "currently not supported"
@@ -123,7 +142,7 @@ def file_press(menu):
             app.setStatusbarWidth(len("Intesity Filter: 1"), field=0)
             app.setStatusbarWidth(len("Loaded file: {0}".format(filetoopen)), field=2)
 
-            openplot(X,Y,ave_noise,Xscalar)
+            openplot(X,Y,ave_noise,Xscalar,XFilter,YFilter)
 
         elif filetoopen == "":
             return
@@ -142,6 +161,30 @@ def about_press(menu):
     if menu == "help":
         print("help")
 
+def view_press(menu):
+    if menu == "Change Filters":
+             app.showSubWindow("Filters")
+def update_filters(button):
+    if button == "Update":
+        global XFilter
+        global YFilter
+        min_X = app.getEntry("X_min_filter")
+        max_X = app.getEntry("X_max_filter")
+
+        if max_X == "":
+            max_X = 0
+
+        XFilter = (float(min_X),float(max_X))
+        YFilter = int(app.getEntry("Y_filter"))
+
+        global X_mem
+        global Y_mem
+        global ave_noise_mem
+        global Xscalar_mem
+
+
+        openplot(X_mem, Y_mem, ave_noise_mem, Xscalar_mem, XFilter, YFilter)
+
 if __name__ == '__main__':
     #Create app - name and size
     app = gui("I2MS Viewer 0.1", "800x600")
@@ -149,8 +192,10 @@ if __name__ == '__main__':
     #build menus
     file_menus = ["Open","Save as","Add from Clipboard"]
     about_menu = ["Version","help"]
+    view_menu = ["Change Filters"]
     app.addMenuList("file",file_menus,file_press)
     app.addMenuList("About", about_menu, about_press)
+    app.addMenuList("View", view_menu, view_press)
 
     #Create starting StatusBar
     app.addStatusbar(fields=3,side="RIGHT")
@@ -168,6 +213,19 @@ if __name__ == '__main__':
     app.startSubWindow("clipadd", "Add From Clipboard")
     app.addScrolledTextArea("txtarea1")
     app.addButtons(["add from clipboard","Save"],clipboardwin)
+    app.stopSubWindow()
+
+    #Build Filter subwindow
+    app.startSubWindow("Filters","Adjust Filters")
+    app.addLabel("Mass Filter range (Da)",row=0, column=0)
+    app.addLabel("Intensity Filter", row=1, column=0)
+    app.addEntry("X_min_filter", row=0, column=1)
+    app.addEntry("X_max_filter", row=0, column=2)
+    app.addEntry("Y_filter", row=1, column=1)
+    app.addButton("Update",update_filters)
+
+    app.setEntry("Y_filter",YFilter)
+    app.setEntry("X_min_filter", XFilter[0])
     app.stopSubWindow()
 
     #Initialize the app
