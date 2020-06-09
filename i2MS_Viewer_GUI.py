@@ -8,6 +8,7 @@ ave_noise_mem = 1
 Xscalar_mem = 1
 XFilter = (1,0)
 YFilter = 1
+loaded_file =""
 
 
 """
@@ -92,6 +93,9 @@ def file_press(menu):
     elif menu == "Open":
         filetoopen = app.openBox("openfile",fileTypes=[("compatible files",("*.I2MS","*.txt","*.csv")),("i2ms files","*.I2MS"),("mzML - not implemented yet","*.mzML"),("txt","*.txt"),("all file  types","*.*")])
 
+        global loaded_file
+        loaded_file = filetoopen
+
         if  filetoopen.split(".")[-1].upper() == "I2MS" :
 
 
@@ -137,11 +141,23 @@ def file_press(menu):
                 Xscalar_mem = Xscalar
 
                 # Update Status Bar
+
+
+                if XFilter[1] == 0:
+                    X_Filter_status = "Mass Filter (Da): {0}-".format(XFilter[0])
+                else:
+                    X_Filter_status = "Mass Filter (Da): {0}-{1}".format(XFilter[0], XFilter[1])
+
+                app.setStatusbar("Intensity Filter: {0}".format(YFilter), 0)
+                app.setStatusbar(X_Filter_status, 1)
+
+                app.setStatusbarWidth(len("Intensity Filter: 1"), field=0)
+                app.setStatusbarWidth(len(X_Filter_status), field=1)
+
+
+
                 app.setStatusbar("Loaded file: {0}".format(filetoopen), 2)
-                app.setStatusbar("Mass Filter (Da): 1", 1)
-                app.setStatusbar("Intesity Filter: 1", 0)
-                app.setStatusbarWidth(len("Mass Filter (Da): 1"), field=1)
-                app.setStatusbarWidth(len("Intesity Filter: 1"), field=0)
+
                 app.setStatusbarWidth(len("Loaded file: {0}".format(filetoopen)), field=2)
 
                 openplot(X,Y,ave_noise,Xscalar,XFilter,YFilter)
@@ -155,7 +171,10 @@ def file_press(menu):
 
     # Save currently loaded spectra
     elif menu == "Save as":
-        savefile = app.saveBox("save file", fileName="i2ms_spec",fileExt=".I2MS",fileTypes=[("i2ms files","*.I2MS"),("mzML","*.mzML")])
+        current_file_name = loaded_file.split("/")[-1].split(".")[0]
+
+
+        savefile = app.saveBox("save file", fileName=current_file_name,fileExt=".I2MS",fileTypes=[("i2ms files","*.I2MS"),("mzML","*.mzML")])
         if savefile.split(".")[-1] == "I2MS":
             CreateI2MS((X_mem,Y_mem,ave_noise_mem,Xscalar_mem),savefile)
         elif savefile.split(".")[-1] == "mzML":
@@ -170,14 +189,14 @@ def view_press(menu):
              app.showSubWindow("Filters")
 def update_filters(button):
     if button == "Update":
-        global XFilter
-        global YFilter
+
         min_X = app.getEntry("X_min_filter")
         max_X = app.getEntry("X_max_filter")
 
         if max_X == "":
             max_X = 0
-
+        global XFilter
+        global YFilter
         XFilter = (float(min_X),float(max_X))
         YFilter = int(app.getEntry("Y_filter"))
 
@@ -186,6 +205,17 @@ def update_filters(button):
         global ave_noise_mem
         global Xscalar_mem
 
+
+        if XFilter[1] == 0:
+            X_Filter_status = "Mass Filter (Da): {0}-".format(XFilter[0])
+        else:
+            X_Filter_status = "Mass Filter (Da): {0}-{1}".format(XFilter[0],XFilter[1])
+
+        app.setStatusbar("Intensity Filter: {0}".format(YFilter), 0)
+        app.setStatusbar(X_Filter_status, 1)
+
+        app.setStatusbarWidth(len("Intensity Filter: 1"), field=0)
+        app.setStatusbarWidth(len(X_Filter_status), field=1)
 
         openplot(X_mem, Y_mem, ave_noise_mem, Xscalar_mem, XFilter, YFilter)
 
@@ -205,9 +235,9 @@ if __name__ == '__main__':
     app.addStatusbar(fields=3,side="RIGHT")
     app.setStatusbar("Loaded file: None", 2)
     app.setStatusbar("Mass Filter (Da): 1", 1)
-    app.setStatusbar("Intesity Filter: 1", 0)
+    app.setStatusbar("Intensity Filter: 1", 0)
     app.setStatusbarWidth(len("Mass Filter (Da): 1"), field=1)
-    app.setStatusbarWidth(len("Intesity Filter: 1"), field=0)
+    app.setStatusbarWidth(len("Intensity Filter: 1"), field=0)
     app.setStatusbarWidth(len("Loaded file: None"), field=2)
 
     #Create Empty matplotlib plot
