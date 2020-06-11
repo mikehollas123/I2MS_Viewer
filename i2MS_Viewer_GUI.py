@@ -11,14 +11,19 @@ X_mem = []
 Y_mem = []
 ave_noise_mem = 1
 Xscalar_mem = 1
-XFilter = (1,0)
+XFilter = (1,0) # 0 = no max
 YFilter = 1
 loaded_file =""
 progress = 0
 
+"""
+Save loaded data as an I2MS file - a custom binary file format - it can only be opened by this application
 
+X axis data is scaled in order to save as int array. saving space. using XScalar variable - file contains the average noise
+inside the file for faster loading 
 
-
+- in future will create a separate background noise /baseline function that can be called
+"""
 def CreateI2MS(data, file):
     if type(data) is tuple:
         with open(str(file), "wb") as pklout:
@@ -38,11 +43,20 @@ def CreateI2MS(data, file):
         pkl.dump((X, Y, ave_noise, Xscalar), pklout)
 
 
+"""
+save loaded data as an mzml file - this can be opened in other software. However, the data is all stored in one 
+scan. mmass will not open these files. TDValidator will!
+
+right now all the info is hard coded - this can be changed in the future - i'm not exactly sure what's used
+"""
+
 def CreateMZML(data, file):
     if type(data) is tuple:
+        #if data is from loaded data
         X, Y, ave_noise, Xscalar = data
         X = [X[i] * Xscalar for i in range(len(X))]
     else:
+        #if data source comes from clipboard
         lines = data.split("\n")
         XY = [(float(lines[i].split(",")[0]), int(lines[i].split(",")[1])) for i in range(len(lines)) if
               int(lines[i].split(",")[1]) > 0]
@@ -57,7 +71,7 @@ def CreateMZML(data, file):
         writer.file_description(["I2MS Spectrum"])
         writer.software_list([{
             "id": "I2MS to mzML",
-            "veresion": "0.1.1", "params": ["python-psims"]}
+            "version": "0.1.1", "params": ["python-psims"]}
         ])
         source = writer.Source(1, ["electrospray ionization", "electrospray inlet"])
         analyzer = writer.Analyzer(2, [
@@ -94,12 +108,12 @@ def clipboardwin(button):
         app.setTextArea("txtarea1",app.topLevel.clipboard_get() ) # add clipborad to textarea object
     elif button == "Load":
             data = app.getTextArea("txtarea1")
-            app.setTextArea("txtarea1", "")
+            app.setTextArea("txtarea1", "") # clear text area and close the subwindow
             app.hideSubWindow("clipadd")
 
             try:
-                app.queueFunction(app.showSubWindow, "prog")
-                app.threadCallback(openfromclip, load_file, data)
+                app.queueFunction(app.showSubWindow, "prog") # simple progress window - it's terrible! but distracts the user
+                app.threadCallback(openfromclip, load_file, data) # runs openfromclip fuction in a seperate thread - returns to load_file function
 
                 # Update Status Bar
 
@@ -136,28 +150,47 @@ def openI2MS(filetoopen):
         return (X, Y, ave_noise, Xscalar,filetoopen)
 
 
+"""
+read data from a mzML file - will only take the first scan - so noni2ms data will load, but only scan #1
+"""
+
 def mZML_reader(filetoopen):
     app.queueFunction(app.setStatusbarWidth, len("Loading file..."), field=2)
     app.queueFunction(app.setStatusbar, "Loading file...", 2)
     data = mzml.read(filetoopen)
 
+    #load only the first scan
     for scan in data:
         if scan['id'] == '1':
             X = scan['m/z array']
             Y = scan['intensity array']
             break
 
-    Xscalar = np.around(min([X[i+1]-X[i] for i in range(0,len(X)-1) if X[i+1]-X[i] != 0.0]),2)
-    XY = [(X[i]/Xscalar,Y[i]) for i in range(len(X)) if Y[i] > 0]  # remove 0 values and adjust for scalar
+    Xscalar = np.around(min([X[i+1]-X[i] for i in range(0,len(X)-1) if X[i+1]-X[i] != 0.0]),2) # no Xscalar is encoded in this data - and values have been filtered out  - so need to guess
+    if Xscalar > 1:
+        Xscalar = 0.2 # fix if the estimator is way off
 
-    X, Y = ([int(XY[x][0]) for x in range(len(XY))], [int(XY[x][1]) for x in range(len(XY))])
-    ave_noise = np.average([float(XY[j][1]) for j in range(len(XY)) if int(XY[j][1]) <= 10])  # determine average noise
+
+
+    try:
+        XY = [(X[i] / Xscalar, Y[i]) for i in range(len(X)) if Y[i] > 0]  # remove 0 values and adjust for scalar
+        X, Y = ([int(XY[x][0]) for x in range(len(XY))], [int(XY[x][1]) for x in range(len(XY))])
+        ave_noise = np.average([float(XY[j][1]) for j in range(len(XY)) if int(XY[j][1]) <= 10])  # determine average noise
+    except: # if all else fails set scalar to 1 - so we can open it
+        Xscalar = 1
+        XY = [(X[i] / Xscalar, Y[i]) for i in range(len(X)) if Y[i] > 0]  # remove 0 values and adjust for scalar
+        X, Y = ([int(XY[x][0]) for x in range(len(XY))], [int(XY[x][1]) for x in range(len(XY))])
+        ave_noise = np.average(
+            [float(XY[j][1]) for j in range(len(XY)) if int(XY[j][1]) <= 10])  # determine average noise
     global progress
     progress = 50
     app.registerEvent(updatprogress)
     return (X, Y, ave_noise, Xscalar, filetoopen)
 
 
+"""
+laod data from clipboard
+"""
 def openfromclip(data):
     app.queueFunction(app.setStatusbarWidth, len("Loading file..."), field=2)
     app.queueFunction(app.setStatusbar, "Loading file...", 2)
@@ -202,7 +235,7 @@ def opencsv(filetoopen):
 
 
 """
-open data and load it into plot window
+take loaded data and display in plot window
 """
 def openplot(X,Y,ave_noise,Xscalar,XFilter=(1,0),YFilter=1):
 
@@ -231,6 +264,11 @@ def openplot(X,Y,ave_noise,Xscalar,XFilter=(1,0),YFilter=1):
     app.registerEvent(updatprogress)
     app.queueFunction(app.hideSubWindow, "prog")
 
+
+"""
+takes data from all sources and laods them into the global varaibles and calls the open plot function 
+also updates the status bar
+"""
 def load_file(input):
     X, Y, ave_noise, Xscalar,filetoopen = input
     global X_mem
@@ -277,7 +315,7 @@ def file_press(menu):
     if menu == "Add from Clipboard":
         app.showSubWindow("clipadd")
     elif menu == "Open":
-        filetoopen = app.openBox("openfile",fileTypes=[("compatible files",("*.I2MS","*.txt","*.csv")),("i2ms files","*.I2MS"),("mzML - not implemented yet","*.mzML"),("txt","*.txt"),("all file  types","*.*")])
+        filetoopen = app.openBox("openfile",fileTypes=[("Compatible files",("*.I2MS","*.txt","*.csv","*.mzML")),("I2MS files","*.I2MS"),("mzML","*.mzML"),("txt","*.txt"),("All file types","*.*")])
 
         global loaded_file
         loaded_file = filetoopen
@@ -299,12 +337,6 @@ def file_press(menu):
 
             app.queueFunction(app.showSubWindow, "prog")
             app.threadCallback(mZML_reader, load_file, filetoopen)
-
-            "currently not supported"
-            #app.errorBox("Open Error","Sorry mzML files are currently not supported for reading")
-
-
-
 
         elif filetoopen.split(".")[-1].upper() == "TXT" or filetoopen.split(".")[-1].upper() == "CSV":
 
@@ -350,9 +382,14 @@ def file_press(menu):
         elif savefile.split(".")[-1] == "mzML":
             CreateMZML((X_mem,Y_mem,ave_noise_mem,Xscalar_mem),savefile)
 
+"""
+open default email client - emails me!
+"""
 def email():
     webbrowser.open('mailto:michael.hollas@northwestern.edu', new=1)
-
+"""
+abount menu control
+"""
 def about_press(menu):
     if menu == "Help":
         app.showSubWindow("help")
@@ -360,17 +397,27 @@ def about_press(menu):
         os.startfile(r'SourceCode.txt')
     if menu == "Version":
         app.showSubWindow("version")
+
+"""
+view menu control
+"""
 def view_press(menu):
     if menu == "Change Filters":
              app.showSubWindow("Filters")
+
+
+"""
+filter updating
+"""
 def update_filters(button):
     if button == "Update":
 
         min_X = app.getEntry("X_min_filter")
         max_X = app.getEntry("X_max_filter")
 
-        if max_X == "":
+        if max_X == "": # if left blank -> no max filter
             max_X = 0
+
         global XFilter
         global YFilter
         XFilter = (float(min_X),float(max_X))
@@ -393,22 +440,35 @@ def update_filters(button):
         app.setStatusbarWidth(len("Intensity Filter: 1"), field=0)
         app.setStatusbarWidth(len(X_Filter_status), field=1)
 
+
+        # refesh plot
         openplot(X_mem, Y_mem, ave_noise_mem, Xscalar_mem, XFilter, YFilter)
 
+
+"""
+simple meter updater
+"""
 def updatprogress():
     app.setMeter("progress",progress)
 
 if __name__ == '__main__':
 
+
+    """
+    Creates the source code file - doesn't include gui stuff
+    """
     with open("I2MS_Viewer_GUI.py","r") as source:
         with open("SourceCode.txt","w") as writefile:
             writefile.write(source.read().split("if __name__ == '__main__':")[0])
 
 
-    version = "0.1 alpha build"
+    version = "0.2 alpha build" # add version here
 
     #Create app - name and size
     app = gui("I2MS Viewer {0}".format(version), "1200x800",showIcon=False)
+
+    # Create Empty matplotlib plot
+    fig = app.addPlotFig("p1", showNav=True)
 
     #build menus
     file_menus = ["Open","Save as","Add from Clipboard"]
@@ -427,10 +487,6 @@ if __name__ == '__main__':
     app.setStatusbarWidth(len("Intensity Filter: 1"), field=0)
     app.setStatusbarWidth(len("Loaded file: None"), field=2)
 
-
-    #Create Empty matplotlib plot
-    fig = app.addPlotFig("p1",showNav=True)
-
     #Version Window
     app.startSubWindow("version","Version")
     app.setSize(300, 200)
@@ -442,16 +498,14 @@ if __name__ == '__main__':
     app.startSubWindow("help","Help")
     app.setSize(300, 200)
     app.startFrame("1")
-
     app.message("\nFor any help please email michael.hollas@northwestern.edu\n")
     app.addButton("email",email)
     app.stopFrame()
     app.stopSubWindow()
 
     #progress window
-    app.startSubWindow("prog","progress")
+    app.startSubWindow("prog","Progress")
     app.setTransparency(50)
-
     app.addMeter("progress")
     app.stopSubWindow()
 
@@ -461,7 +515,7 @@ if __name__ == '__main__':
     app.addButtons(["add from clipboard","Load"],clipboardwin)
     app.stopSubWindow()
 
-    #Build Filter subwindow
+    #Build Filter subwindow - needs work - looks terrible
     app.startSubWindow("Filters","Adjust Filters")
     app.addLabel("Mass Filter range (Da)",row=0, column=0)
     app.addLabel("Intensity Filter", row=1, column=0)
@@ -469,9 +523,6 @@ if __name__ == '__main__':
     app.addEntry("X_max_filter", row=0, column=2)
     app.addEntry("Y_filter", row=1, column=1)
     app.addButton("Update",update_filters)
-
-
-
     app.setEntry("Y_filter",YFilter)
     app.setEntry("X_min_filter", XFilter[0])
     app.stopSubWindow()
