@@ -1,5 +1,5 @@
 from appJar import gui
-import os
+import os, sys
 import pickle as pkl
 import numpy as np
 from psims.mzml import MzMLWriter
@@ -15,6 +15,7 @@ XFilter = (1,0) # 0 = no max
 YFilter = 1
 loaded_file =""
 progress = 0
+plot_title = ""
 
 """
 Save loaded data as an I2MS file - a custom binary file format - it can only be opened by this application
@@ -203,8 +204,15 @@ def openfromclip(data):
 
     Xscalar = float(lines[1].split(",")[0]) - float(
         lines[0].split(",")[0])  # create a scalar so we can store X values as int
-    XY = [(float(lines[i].split(",")[0]) / Xscalar, int(lines[i].split(",")[1])) for i in range(len(lines))
-          if int(lines[i].split(",")[1]) > 0]  # remove 0 values and adjust for scalar
+
+    XY = []
+
+    for i in range(len(lines)):
+        try:
+            if int(lines[i].split(",")[1]) > 0:  # remove 0 values and adjust for scalar
+                XY.append((float(lines[i].split(",")[0]) / Xscalar, int(lines[i].split(",")[1])))
+        except:
+            ""
 
     X, Y = ([int(XY[x][0]) for x in range(len(XY))], [int(XY[x][1]) for x in range(len(XY))])
     ave_noise = np.average([float(XY[j][1]) for j in range(len(XY)) if int(XY[j][1]) <= 10])  # determine average noise
@@ -218,6 +226,7 @@ def opencsv(filetoopen):
     app.queueFunction(app.setStatusbarWidth, len("Loading file..."), field=2)
     app.queueFunction(app.setStatusbar, "Loading file...", 2)
     with open(filetoopen, "r") as readfile:
+
         data = readfile.read()
         lines = data.split("\n")
         global progress
@@ -226,8 +235,15 @@ def opencsv(filetoopen):
         app.registerEvent(updatprogress)
 
         Xscalar = float(lines[1].split(",")[0]) - float(lines[0].split(",")[0]) # create a scalar so we can store X values as int
-        XY = [(float(lines[i].split(",")[0]) / Xscalar, int(lines[i].split(",")[1])) for i in range(len(lines))
-              if int(lines[i].split(",")[1]) > 0] # remove 0 values and adjust for scalar
+        XY = []
+
+        for i in range(len(lines)):
+            try:
+                if int(lines[i].split(",")[1]) > 0: # remove 0 values and adjust for scalar
+                    XY.append( (float(lines[i].split(",")[0]) / Xscalar, int(lines[i].split(",")[1])) )
+            except:
+                ""
+
 
         X, Y = ([int(XY[x][0]) for x in range(len(XY))], [int(XY[x][1]) for x in range(len(XY))])
         ave_noise = np.average([float(XY[j][1]) for j in range(len(XY)) if int(XY[j][1]) <= 10]) # determine average noise
@@ -251,12 +267,27 @@ def openplot(X,Y,ave_noise,Xscalar,XFilter=(1,0),YFilter=1):
 
         X_filtered = [X[i]*Xscalar for i in range(len(X)) if max_X_Filter >= X[i]*Xscalar >= min_X_Filter and Y[i] >= YFilter] # remove values that dont make it through the filter
         Y_filtered = [Y[i] for i in range(len(Y)) if max_X_Filter >= X[i]*Xscalar >= min_X_Filter and Y[i] >= YFilter]
+
+
     fig.clf()
     ax = fig.add_subplot()
     ax.vlines(X_filtered, 0, Y_filtered)
-    ax.axhline(ave_noise, 0, 1, color="r") # add 'baseline'
+
+    if app.getMenuCheckBox("View","Baseline noise") == True:
+        ax.axhline(ave_noise, 0, 1, color="r") # add 'baseline'
+
+    if app.getMenuCheckBox("View","Plot Title") == True and plot_title != "":
+        ax.set_title(plot_title, fontsize = 24)
+
+
     ax.set_xlim(0.0)
     ax.set_ylim(0.0)
+    #ax.set_yticks([0,200,4000])
+    ax.tick_params(axis='y',labelsize= 20)
+    ax.tick_params(axis='x',  labelsize=20)
+
+    ax.set_ylabel("Abundance (counts)", fontsize = 24)
+    ax.set_xlabel("Mass (Da)", fontsize = 24)
     app.queueFunction(app.refreshPlot,"p1")
     global progress
     progress = 100
@@ -394,7 +425,9 @@ def about_press(menu):
     if menu == "Help":
         app.showSubWindow("help")
     if menu == "Source code":
-        os.startfile(r'SourceCode.txt')
+        filename = os.path.join(os.path.dirname(sys.executable), 'SourceCode.txt')
+        os.startfile(filename)
+
     if menu == "Version":
         app.showSubWindow("version")
 
@@ -404,7 +437,14 @@ view menu control
 def view_press(menu):
     if menu == "Change Filters":
              app.showSubWindow("Filters")
+    if menu == "Baseline noise":
+        app.thread(openplot,X_mem, Y_mem, ave_noise_mem, Xscalar_mem, XFilter, YFilter)
+    if menu == "Plot Title":
+        global plot_title
 
+        if app.getMenuCheckBox("View", "Plot Title") == True:
+            plot_title = app.stringBox("Plot Tile","Title of Plot")
+        app.thread(openplot, X_mem, Y_mem, ave_noise_mem, Xscalar_mem, XFilter, YFilter)
 
 """
 filter updating
@@ -454,15 +494,7 @@ def updatprogress():
 if __name__ == '__main__':
 
 
-    """
-    Creates the source code file - doesn't include gui stuff
-    """
-    with open("I2MS_Viewer_GUI.py","r") as source:
-        with open("SourceCode.txt","w") as writefile:
-            writefile.write(source.read().split("if __name__ == '__main__':")[0])
-
-
-    version = "0.2 alpha build" # add version here
+    version = "0.4 alpha build" # add version here
 
     #Create app - name and size
     app = gui("I2MS Viewer {0}".format(version), "1200x800",showIcon=False)
@@ -477,6 +509,9 @@ if __name__ == '__main__':
     app.addMenuList("file",file_menus,file_press)
     app.addMenuList("View", view_menu, view_press)
     app.addMenuList("About", about_menu, about_press)
+    app.addMenuCheckBox("View","Baseline noise",view_press)
+    app.setMenuCheckBox("View","Baseline noise")
+    app.addMenuCheckBox("View", "Plot Title", view_press)
 
     #Create starting StatusBar
     app.addStatusbar(fields=3,side="RIGHT")
